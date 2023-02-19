@@ -1,0 +1,93 @@
+version: '3.9'
+
+services:
+  app:
+    container_name: 'cardia-app'
+    build:
+      context: './.docker/app'
+      dockerfile: 'Dockerfile'
+    volumes:
+      - './:/app'
+    depends_on:
+      - mysql
+    links:
+      - mysql
+    restart: on-failure
+    networks:
+      - cardia-network
+
+  nginx:
+    container_name: 'cardia-nginx'
+    image: nginx
+    links:
+      - app
+    volumes:
+      - './:/app'
+      - './.docker/nginx/conf.d:/etc/nginx/conf.d'
+    ports:
+      - '${APP_PORT:-80}:80'
+    depends_on:
+      - app
+    restart: on-failure
+    networks:
+      - cardia-network
+
+  mysql:
+    container_name: 'cardia-mysql'
+    image: mysql:8.0
+    ports:
+      - '${FORWARD_DB_PORT:-3306}:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: '${DB_PASSWORD}'
+      MYSQL_DATABASE: '${DB_DATABASE}'
+      MYSQL_USER: '${DB_USERNAME}'
+      MYSQL_PASSWORD: '${DB_PASSWORD}'
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+    volumes:
+      - 'cardiamysql:/var/lib/mysql'
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping']
+    restart: on-failure
+    networks:
+      - cardia-network
+
+  mailhog:
+    container_name: 'cardia-mailhog'
+    image: 'mailhog/mailhog:latest'
+    ports:
+      - '${FORWARD_MAILHOG_DASHBOARD_PORT:-8025}:8025'
+    networks:
+      - cardia-network
+
+  node:
+    container_name: 'cardia-node'
+    image: node:16-alpine
+    volumes:
+      - './:/app'
+      - './.docker/node/.npm:/.npm'
+    working_dir: '/app'
+    networks:
+      - cardia-network
+
+  phpmyadmin:
+    container_name: 'cardia-phpmyadmin'
+    image: phpmyadmin
+    restart: on-failure
+    ports:
+      - '${FORWARD_PMA_PORT:-8080}:80'
+    environment:
+      - PMA_HOST=mysql
+    depends_on:
+      - mysql
+    links:
+      - mysql
+    networks:
+      - cardia-network
+
+volumes:
+  cardiamysql:
+    driver: local
+
+networks:
+  cardia-network:
+    driver: bridge
